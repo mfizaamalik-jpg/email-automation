@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>email-rag-simple</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --border: #232733;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #5b8cff;
+    --good: #33c17a;
+    --warn: #e3b341;
+    --bad: #f0576b;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --border: #e2e5eb;
+      --text: #1b1f27;
+      --muted: #626a7a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem 1rem 4rem;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 0.25rem; display: flex; align-items: center; gap: 0.5rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+  .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.up { background: var(--good); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+  .card .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.35rem; }
+  .card .value { font-size: 1.1rem; font-weight: 600; }
+  .badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-top: 0.4rem; }
+  .badge.good { background: rgba(51, 193, 122, 0.16); color: var(--good); }
+  .badge.warn { background: rgba(227, 179, 65, 0.18); color: var(--warn); }
+  .badge.bad { background: rgba(240, 87, 107, 0.16); color: var(--bad); }
+  .actions { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: white; border: none; border-radius: 8px;
+    padding: 0.6rem 1.1rem; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: 0.6; cursor: progress; }
+  .log { font-family: ui-monospace, Consolas, monospace; font-size: 0.8rem; color: var(--muted); white-space: pre-wrap; margin-bottom: 1.5rem; min-height: 1.2em; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:last-child td { border-bottom: none; }
+  .draft { max-width: 320px; white-space: pre-wrap; color: var(--muted); }
+  .empty { color: var(--muted); padding: 2rem; text-align: center; }
+  .cron-note { font-size: 0.8rem; color: var(--muted); margin: 0 0 1.5rem; line-height: 1.45; max-width: 640px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span id="statusDot" class="dot"></span> email-rag-simple</h1>
+  <p class="sub">Gmail auto-draft dashboard</p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Server</div>
+      <div class="value" id="serverStatus">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Knowledge base chunks</div>
+      <div class="value" id="kbCount">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Last inbox check</div>
+      <div class="value" id="lastCheck">—</div>
+      <div id="cronBadge"></div>
+    </div>
+  </div>
+
+  <p class="cron-note" id="cronNote"></p>
+
+  <div class="actions">
+    <button id="runNowBtn">Run inbox check now</button>
+    <button id="testTgBtn" class="secondary">Send test Telegram</button>
+    <button id="refreshBtn" class="secondary">Refresh</button>
+  </div>
+  <div class="log" id="actionLog"></div>
+
+  <table>
+    <thead>
+      <tr><th>Sender</th><th>Subject</th><th>Niche</th><th>Confidence</th><th>Status</th><th>Draft</th></tr>
+    </thead>
+    <tbody id="resultsBody">
+      <tr><td colspan="6" class="empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function fmtRelative(iso) {
+  const then = new Date(iso).getTime();
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + " min ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + " hr " + (mins % 60) + " min ago";
+  return Math.floor(hrs / 24) + " day(s) ago";
+}
+
+function renderCronHealth(lastCheckIso) {
+  const badge = $("cronBadge");
+  const note = $("cronNote");
+  if (!lastCheckIso) {
+    badge.innerHTML = '<span class="badge warn">no checks recorded</span>';
+    note.textContent = "/run-now has never been called since this server last started. Either the external cron job isn't set up yet, hasn't fired yet, or the free instance recently restarted (this status resets on every restart/redeploy — it isn't saved to disk).";
+    return;
+  }
+  const minsAgo = (Date.now() - new Date(lastCheckIso).getTime()) / 60000;
+  if (minsAgo <= 10) {
+    badge.innerHTML = '<span class="badge good">active</span>';
+    note.textContent = "run-now was called recently — your cron job looks like it's firing on schedule.";
+  } else if (minsAgo <= 30) {
+    badge.innerHTML = '<span class="badge warn">stale</span>';
+    note.textContent = "It's been a little while since the last check. Fine if your cron interval is longer than this; otherwise check the job's execution history on cron-job.org for failures.";
+  } else {
+    badge.innerHTML = '<span class="badge bad">inactive</span>';
+    note.textContent = "No check in over 30 minutes. The cron job may not be configured, may be failing, or the service may have redeployed and reset this in-memory status. Check cron-job.org's execution history for this job to confirm.";
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function renderResults(results) {
+  const body = $("resultsBody");
+  if (!results || !results.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">No results yet — run a check.</td></tr>';
+    return;
+  }
+  body.innerHTML = results.map(r => `
+    <tr>
+      <td>${escapeHtml(r.sender || "")}</td>
+      <td>${escapeHtml(r.subject || "")}</td>
+      <td>${escapeHtml(r.niche || "—")}</td>
+      <td>${r.confidence != null ? Number(r.confidence).toFixed(2) : "—"}</td>
+      <td>${escapeHtml(r.status || "")}</td>
+      <td class="draft">${escapeHtml(r.draft || "")}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadStatus() {
+  try {
+    const res = await fetch("/");
+    const data = await res.json();
+    $("statusDot").classList.toggle("up", !!data.running);
+    $("serverStatus").textContent = data.running ? "running" : "stopped";
+    $("kbCount").textContent = data.kb_count ?? "—";
+    $("lastCheck").textContent = data.last_check ? fmtRelative(data.last_check) : "never";
+    renderCronHealth(data.last_check);
+    renderResults(data.last_results);
+  } catch (e) {
+    $("serverStatus").textContent = "unreachable";
+  }
+}
+
+async function runNow() {
+  const btn = $("runNowBtn");
+  btn.disabled = true;
+  $("actionLog").textContent = "Running inbox check…";
+  try {
+    const res = await fetch("/run-now", { method: "POST" });
+    const data = await res.json();
+    $("actionLog").textContent = `Done — processed ${data.processed} email(s).`;
+    await loadStatus();
+  } catch (e) {
+    $("actionLog").textContent = "Failed: " + e;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function testTelegram() {
+  const btn = $("testTgBtn");
+  btn.disabled = true;
+  $("actionLog").textContent = "Sending test Telegram message…";
+  try {
+    const res = await fetch("/test-telegram");
+    const data = await res.json();
+    $("actionLog").textContent = data.sent
+      ? "Test message sent — check Telegram."
+      : "Failed to send — check TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.";
+  } catch (e) {
+    $("actionLog").textContent = "Failed: " + e;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("runNowBtn").addEventListener("click", runNow);
+$("testTgBtn").addEventListener("click", testTelegram);
+$("refreshBtn").addEventListener("click", loadStatus);
+
+loadStatus();
+setInterval(loadStatus, 20000);
+</script>
+</body>
+</html>

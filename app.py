@@ -20,6 +20,7 @@ import requests
 import uvicorn
 from bs4 import BeautifulSoup
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from google import genai
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -455,6 +456,12 @@ def run_now():
 def test_telegram():
     sent = send_telegram("Test message from email-rag-simple")
     return {"sent": sent}
+
+
+@app.get("/dashboard")
+def dashboard():
+    """Small read/trigger UI: status, cron-health indicator, run-now/test buttons."""
+    return FileResponse("static/index.html")
 
 
 if __name__ == "__main__":

@@ -8,8 +8,9 @@ generation (RAG), built entirely on free services:
 - **ChromaDB** — local vector store for RAG context, built from `knowledge/`
 - **Telegram** — sends a free notification when a draft is ready
 
-No web UI — this is an API-only backend, polled on a schedule and/or driven
-via a couple of HTTP endpoints.
+A small built-in dashboard at `/dashboard` shows status and lets you trigger
+runs by hand; the core app is still API-first, driven by an external cron
+pinger hitting `/run-now`.
 
 ## Project layout
 
@@ -218,6 +219,17 @@ instead of an internal scheduler, an external free cron service pings
    inactivity and take a few seconds to wake on the next request, so the
    first cron hit after idle time may be slower — this is expected and free.
 
+7. **Confirm the cron job is actually firing.** Two sources of truth:
+   - **cron-job.org's own dashboard** — open the job and check its
+     "History"/execution log. This is authoritative for whether the job is
+     configured and whether each ping succeeded (HTTP 200) or failed.
+   - **This app's `/dashboard` page** — shows a `last_check` timestamp and a
+     cron-health badge (active / stale / inactive) derived from it. If it
+     says "no checks recorded" even though cron-job.org shows successful
+     pings, the Render instance likely restarted since — `last_check` is
+     in-memory only and resets on every redeploy/restart, it isn't persisted
+     to disk.
+
 ## API endpoints
 
 | Endpoint | Method | Description |
@@ -225,6 +237,7 @@ instead of an internal scheduler, an external free cron service pings
 | `/` | GET | Status: `running`, `last_check`, `poll_interval`, `kb_count`, `last_results` |
 | `/run-now` | GET or POST | Runs `process_inbox()` immediately; returns `{processed, results}`. GET exists so a simple cron pinger can trigger it with a plain URL hit. |
 | `/test-telegram` | GET | Sends a test Telegram message; returns `{sent: bool}` |
+| `/dashboard` | GET | Small HTML dashboard: status, a cron-health indicator (based on `last_check`), buttons to trigger `/run-now` and `/test-telegram`, and a table of the last run's results |
 
 ## Troubleshooting
 

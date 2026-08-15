@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py rag.py config.py ./
 COPY knowledge/ ./knowledge/
+COPY static/ ./static/
 
 EXPOSE 8000
 
