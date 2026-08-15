@@ -2,14 +2,15 @@
 # FastAPI entrypoint for email-rag-simple.
 # Exposes endpoints to trigger a Gmail inbox check, retrieve relevant context
 # from the knowledge base via rag.py, draft a reply using Google Gemini, and
-# send a Telegram notification for review/approval. Also wires up
-# an APScheduler job to poll Gmail periodically. No web UI — API only.
+# send a Telegram notification for review/approval. No internal scheduler —
+# an external cron pinger triggers /run-now. No web UI — API only.
 
 import base64
 import json
 import logging
 import os
 import re
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -17,13 +18,11 @@ from email.mime.text import MIMEText
 
 import requests
 import uvicorn
-from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
 from fastapi import FastAPI
 from google import genai
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 import config
@@ -44,21 +43,57 @@ SCOPES = [
 ]
 
 
-def gmail_service():
-    """Build an authorized Gmail API client, caching creds in token.json."""
-    creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+def credentials_file_path() -> str:
+    """Resolve the OAuth client credentials.json path.
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    Prefers GOOGLE_CREDENTIALS_JSON (the full credentials.json contents as an
+    env var) and materializes it to a temp file, otherwise falls back to a
+    local credentials.json in the project root. Not needed for normal Gmail
+    API calls (the cached token already carries client id/secret), but kept
+    available for gen_token.py-style flows that need a real file path.
+    """
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        path = os.path.join(tempfile.gettempdir(), "credentials.json")
+        with open(path, "w") as f:
+            f.write(creds_json)
+        return path
+    return "credentials.json"
+
+
+def gmail_service():
+    """Build an authorized Gmail API client from a pre-generated token.
+
+    No local browser flow at runtime (this is expected to run headless, e.g.
+    on Render). The token must be generated once locally via gen_token.py and
+    supplied as the GOOGLE_TOKEN_JSON env var (a full token.json JSON string).
+    Falls back to a local token.json file for local development.
+    """
+    token_json = os.getenv("GOOGLE_TOKEN_JSON")
+    if token_json:
+        creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
+    elif os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    else:
+        raise RuntimeError(
+            "No Gmail token found. Set the GOOGLE_TOKEN_JSON environment variable "
+            "with the contents of a token.json (run gen_token.py locally once to "
+            "generate it), or place a token.json file next to app.py for local dev."
+        )
+
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            # First run: open a local browser window for OAuth consent.
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open("token.json", "w") as f:
-            f.write(creds.to_json())
+            raise RuntimeError(
+                "Gmail token is invalid and cannot be refreshed. Re-run gen_token.py "
+                "locally to generate a fresh token and update GOOGLE_TOKEN_JSON."
+            )
+        # Only persist the refreshed token back to disk when we're using a
+        # local token.json file; env-var-based tokens are immutable at runtime.
+        if not token_json:
+            with open("token.json", "w") as f:
+                f.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
 
@@ -382,8 +417,9 @@ def process_inbox() -> list[dict]:
 # ---------------------------------------------------------------------------
 # FASTAPI
 # ---------------------------------------------------------------------------
-
-scheduler = BackgroundScheduler()
+# No internal scheduler here — Render's free tier has no background worker,
+# so an external cron pinger (e.g. cron-job.org) hits GET /run-now on a
+# schedule instead of this process polling on its own.
 
 
 @asynccontextmanager
@@ -391,11 +427,7 @@ async def lifespan(app: FastAPI):
     config.validate_config()
     if rag.count() == 0:
         rag.ingest()
-
-    scheduler.add_job(process_inbox, "interval", seconds=config.POLL_INTERVAL_SECONDS, id="poll_inbox")
-    scheduler.start()
     yield
-    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="email-rag-simple", lifespan=lifespan)
@@ -404,7 +436,7 @@ app = FastAPI(title="email-rag-simple", lifespan=lifespan)
 @app.get("/")
 def status():
     return {
-        "running": scheduler.running,
+        "running": True,
         "last_check": LAST_CHECK,
         "poll_interval": config.POLL_INTERVAL_SECONDS,
         "kb_count": rag.count(),
@@ -413,6 +445,7 @@ def status():
 
 
 @app.post("/run-now")
+@app.get("/run-now")
 def run_now():
     results = process_inbox()
     return {"processed": len(results), "results": results}
@@ -425,4 +458,4 @@ def test_telegram():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000)
+    uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

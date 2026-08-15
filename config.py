@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- Fillable placeholders (replace with your own values) ---
-MY_EMAIL = "mfizaamalik@gmail.com"
-WHITELIST_SENDERS = ["fizam7519@gmail.com"]
+# --- Secrets & per-deployment settings (all from environment variables) ---
+MY_EMAIL = os.getenv("MY_EMAIL")
+WHITELIST_SENDERS = [s.strip() for s in os.getenv("WHITELIST_SENDERS", "").split(",") if s.strip()]
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -40,12 +40,11 @@ NICHES = {
 
 
 def validate_config():
-    if MY_EMAIL.startswith("<"):
-        print(f"[config] WARNING: MY_EMAIL is still a placeholder: {MY_EMAIL}")
+    if not MY_EMAIL:
+        print("[config] WARNING: MY_EMAIL is not set in the environment.")
 
-    for i, sender in enumerate(WHITELIST_SENDERS):
-        if sender.startswith("<"):
-            print(f"[config] WARNING: WHITELIST_SENDERS[{i}] is still a placeholder: {sender}")
+    if not WHITELIST_SENDERS:
+        print("[config] WARNING: WHITELIST_SENDERS is not set in the environment.")
 
     if not GEMINI_API_KEY:
         print("[config] WARNING: GEMINI_API_KEY is not set in the environment.")
@@ -55,3 +54,7 @@ def validate_config():
 
     if not TELEGRAM_CHAT_ID:
         print("[config] WARNING: TELEGRAM_CHAT_ID is not set in the environment.")
+
+    if not os.getenv("GOOGLE_TOKEN_JSON"):
+        print("[config] WARNING: GOOGLE_TOKEN_JSON is not set in the environment "
+              "(required unless a local token.json file is present).")

@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: email-rag-simple
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: MY_EMAIL
+        sync: false
+      - key: WHITELIST_SENDERS
+        sync: false
+      - key: GOOGLE_TOKEN_JSON
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false

@@ -15,14 +15,16 @@ via a couple of HTTP endpoints.
 
 ```
 email-rag-simple/
-├── app.py                 # FastAPI app, Gmail/Gemini/Telegram logic, scheduler
+├── app.py                 # FastAPI app, Gmail/Gemini/Telegram logic
 ├── rag.py                 # RAG indexing/retrieval over the knowledge/ folder
-├── config.py               # Environment-based configuration and placeholders
+├── config.py               # Environment-based configuration
+├── gen_token.py            # Run locally once to generate a Gmail OAuth token for deployment
 ├── knowledge/               # Reference docs used to ground replies
 │   └── nexacloud_kb.txt      # demo combined knowledge base
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
+├── render.yaml              # Render free-tier web service definition
 ├── .dockerignore
 ├── .env.example
 └── .gitignore
@@ -45,8 +47,11 @@ For each unread, whitelisted email that hasn't already been processed:
 5. **Notify & mark done** — a Telegram message is sent either way, and the
    email is labeled `AutoReplied` and marked read so it isn't reprocessed.
 
-This whole cycle is `process_inbox()`, run automatically every
-`POLL_INTERVAL_SECONDS` and also triggerable on demand via `POST /run-now`.
+This whole cycle is `process_inbox()`, triggered via `GET`/`POST /run-now`.
+There's no internal scheduler — locally you can hit it manually, and in
+production an external cron pinger (e.g. cron-job.org) calls it on a
+schedule instead. This keeps the app stateless and works within Render's
+free tier, which doesn't run background workers.
 
 ## Setup
 
@@ -64,18 +69,21 @@ This whole cycle is `process_inbox()`, run automatically every
    `https://api.telegram.org/bot<token>/getUpdates` in a browser to find your
    `chat_id` in the response.
 
-4. **Copy `.env.example` to `.env`** and fill in all three secrets:
+4. **Copy `.env.example` to `.env`** and fill in the values:
 
    ```
    GEMINI_API_KEY=your-gemini-key
    TELEGRAM_BOT_TOKEN=your-bot-token
    TELEGRAM_CHAT_ID=your-chat-id
+   MY_EMAIL=your-gmail-address
+   WHITELIST_SENDERS=sender1@example.com,sender2@example.com
    ```
 
-   `.env` is gitignored, so these never get committed. Then fill in the
-   remaining, non-secret placeholders in [config.py](config.py):
-   - `MY_EMAIL` — your Gmail address
-   - `WHITELIST_SENDERS` — list of sender addresses this app is allowed to auto-reply to
+   `.env` is gitignored, so these never get committed. `WHITELIST_SENDERS` is
+   a comma-separated list of sender addresses this app is allowed to
+   auto-reply to. `GOOGLE_TOKEN_JSON` and `GOOGLE_CREDENTIALS_JSON` can stay
+   empty for local development — see [Deploying to Render](#deploying-to-render-free-tier)
+   for when those are needed.
 
 5. **Knowledge base.** A demo knowledge base is already included at
    [knowledge/nexacloud_kb.txt](knowledge/nexacloud_kb.txt) — a single combined
@@ -101,8 +109,10 @@ This whole cycle is `process_inbox()`, run automatically every
 
 8. **Test it, in this order:**
    - `GET /test-telegram` to confirm Telegram notifications are working.
-   - `POST /run-now` to process the inbox immediately, or just wait — the
-     scheduler polls Gmail automatically every `POLL_INTERVAL_SECONDS`.
+   - `GET` or `POST /run-now` to process the inbox immediately. There's no
+     internal scheduler, so call this whenever you want a check to run (see
+     [Deploying to Render](#deploying-to-render-free-tier) for automating it
+     with an external cron pinger).
 
 ## Running with Docker
 
@@ -127,11 +137,11 @@ that local server.
    docker compose up --build
    ```
 
-   The API is now available at `http://localhost:8000`, and the scheduler
-   runs inside the container on the same `POLL_INTERVAL_SECONDS` cadence.
-   `chroma_db/` persists in a named Docker volume (`chroma_data`) across
-   restarts, so the knowledge base only gets re-ingested when that volume is
-   empty.
+   The API is now available at `http://localhost:8000`. There's no internal
+   scheduler, so trigger checks with `GET`/`POST /run-now` (manually, or via
+   your own cron). `chroma_db/` persists in a named Docker volume
+   (`chroma_data`) across restarts, so the knowledge base only gets
+   re-ingested when that volume is empty.
 
 3. To run it on a different machine, copy the whole project folder
    (including your `credentials.json`, `token.json`, and `.env`) over and
@@ -145,20 +155,87 @@ that local server.
 *directory* instead, which breaks Gmail auth inside the container. Confirm
 `token.json` is a real file on the host first.
 
+## Deploying to Render (free tier)
+
+This runs the app on Render's free web service plan — nothing runs on your
+own machine, and anyone (including you, from another computer) can hit the
+deployed URL. Render's free tier has no persistent background worker, so
+instead of an internal scheduler, an external free cron service pings
+`/run-now` on a schedule.
+
+1. **Generate a deployable Gmail token, locally, once.** Render can't open a
+   browser for OAuth consent, so do that step on your own machine first, with
+   `credentials.json` (from Setup step 1) in the project root:
+
+   ```
+   python gen_token.py
+   ```
+
+   This opens a browser for the usual Gmail consent flow, saves `token.json`
+   locally as a backup, and prints a single-line JSON string. Copy that
+   string — you'll paste it into Render as `GOOGLE_TOKEN_JSON` in step 4.
+
+2. **Push this repo to GitHub.** `credentials.json`, `token.json`, and `.env`
+   stay out of git (already gitignored) — none of your secrets need to be
+   committed, since Render gets them via environment variables instead.
+
+3. **Create a Render web service.**
+   - Go to [Render](https://render.com/) and create a new **Blueprint** (or
+     **Web Service**) from your GitHub repo. Render auto-detects
+     [render.yaml](render.yaml), which sets the build command
+     (`pip install -r requirements.txt`), the start command
+     (`uvicorn app:app --host 0.0.0.0 --port $PORT`), and the free plan.
+
+4. **Set the environment variables** in the Render dashboard (Environment
+   tab) — `render.yaml` declares these as required but leaves the values to
+   you:
+   - `GEMINI_API_KEY`
+   - `TELEGRAM_BOT_TOKEN`
+   - `TELEGRAM_CHAT_ID`
+   - `MY_EMAIL`
+   - `WHITELIST_SENDERS` — comma-separated, e.g. `a@example.com,b@example.com`
+   - `GOOGLE_TOKEN_JSON` — the string printed by `gen_token.py` in step 1
+   - `GOOGLE_CREDENTIALS_JSON` — optional; contents of `credentials.json`,
+     only needed if some code path requires the file itself rather than the
+     cached token
+
+   Save changes and let Render redeploy. The knowledge base is ingested into
+   Chroma automatically on startup (Render's disk is ephemeral on the free
+   tier, so this re-ingestion happens on every deploy/restart — that's
+   expected and cheap for a small knowledge base).
+
+5. **Verify it's live:** open `https://<your-service>.onrender.com/` and
+   confirm you get back the status JSON, then hit `/test-telegram` to check
+   notifications work end to end.
+
+6. **Set up an external cron to replace the old internal scheduler.** Create
+   a free account at [cron-job.org](https://cron-job.org/), and add a job
+   that sends a `GET` request to `https://<your-service>.onrender.com/run-now`
+   every few minutes. That's what actually drives inbox checks in
+   production — the app itself no longer polls on its own.
+
+   **Note:** Render's free web services spin down after periods of
+   inactivity and take a few seconds to wake on the next request, so the
+   first cron hit after idle time may be slower — this is expected and free.
+
 ## API endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/` | GET | Status: `running`, `last_check`, `poll_interval`, `kb_count`, `last_results` |
-| `/run-now` | POST | Runs `process_inbox()` immediately; returns `{processed, results}` |
+| `/run-now` | GET or POST | Runs `process_inbox()` immediately; returns `{processed, results}`. GET exists so a simple cron pinger can trigger it with a plain URL hit. |
 | `/test-telegram` | GET | Sends a test Telegram message; returns `{sent: bool}` |
 
 ## Troubleshooting
 
 - **Gemini rate limit errors.** The free tier has fairly low requests-per-minute
   limits. `app.py` already sleeps 1 second after each Gemini call; if you still
-  hit limits, raise `POLL_INTERVAL_SECONDS` in `config.py` or process fewer
-  emails per run.
+  hit limits, space out your cron pinger's calls to `/run-now` (`POLL_INTERVAL_SECONDS`
+  in `config.py` documents the recommended spacing) or process fewer emails per run.
+
+- **Gmail auth fails on Render with "No Gmail token found."** `GOOGLE_TOKEN_JSON`
+  is missing or empty in the Render environment variables. Run `python gen_token.py`
+  locally and paste its output into `GOOGLE_TOKEN_JSON`.
 
 - **Gmail OAuth is stuck or using the wrong account.** Delete `token.json` and
   restart the app — this forces a fresh browser OAuth flow.
