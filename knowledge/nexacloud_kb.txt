@@ -1,0 +1,138 @@
+NEXACLOUD — COMPANY & PRODUCT KNOWLEDGE BASE
+=============================================
+
+1. ABOUT THE COMPANY
+--------------------
+NexaCloud is a cloud-based project management SaaS founded in 2021, headquartered in Bangalore, India, with a distributed team across India, the UK, and Singapore. We serve over 8,000 teams in 40+ countries, ranging from 3-person startups to 500-person enterprises. Our mission is to give teams a single place to plan work, track time, and collaborate without tool-switching.
+
+Core product areas: task and project management, time tracking, Gantt and timeline views, workload planning, team collaboration (comments, mentions, file sharing), and reporting dashboards. Native integrations include Slack, Google Workspace, Microsoft Teams, GitHub, and Zapier.
+
+Contact: hello@nexacloud.example
+Sales: sales@nexacloud.example
+Support: support@nexacloud.example
+Support hours: Monday–Friday, 10:00 AM – 6:00 PM IST (excluding Indian public holidays).
+Languages: English today; Spanish and German planned for later this year.
+
+2. PRICING & PLANS
+------------------
+All prices are per user, per month.
+
+STARTER — $12/user/month
+- Up to 10 users
+- Up to 5 active projects
+- Basic task boards (Kanban + list view)
+- 10 GB file storage
+- Email support
+
+GROWTH — $24/user/month (most popular)
+- Unlimited users and projects
+- Everything in Starter, plus:
+- Time tracking and timesheets
+- Gantt charts and timeline view
+- Workload and capacity planning
+- 100 GB file storage
+- All native integrations
+- Guided onboarding session
+
+ENTERPRISE — $45/user/month
+- Everything in Growth, plus:
+- Single Sign-On (SSO / SAML)
+- Advanced permissions and roles
+- Audit logs
+- Dedicated customer success manager
+- Priority support with 4-hour response SLA
+- Unlimited storage
+- Custom contract and invoicing
+
+Billing notes:
+- Annual billing saves 20% versus monthly on all plans.
+- 14-day free trial on every plan; no credit card required to start.
+- Plan upgrades/downgrades take effect immediately and are prorated.
+- Nonprofit and education discounts: 30% off after verification.
+- Monthly plans can be cancelled anytime with no lock-in; annual plans run to the end of the paid term.
+- Accepted payment methods: major credit/debit cards and, for Enterprise, bank transfer/invoice.
+
+3. PRE-SALES FAQ
+----------------
+Q: Is there a free plan?
+A: No permanent free tier, but a full-featured 14-day trial on any plan.
+
+Q: Can I try before paying?
+A: Yes — the trial includes all features of the chosen plan. No card needed.
+
+Q: Can I change plans later?
+A: Yes, anytime. Charges are prorated automatically.
+
+Q: Do you offer onboarding or migration help?
+A: Growth and Enterprise include guided onboarding. Enterprise customers also get migration assistance from a dedicated CSM.
+
+Q: How secure is my data?
+A: Data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Daily automated backups. Hosted in ISO-27001 certified data centers. Enterprise adds SSO, audit logs, and role-based access control.
+
+Q: Do you have an API?
+A: Yes — a REST API is available on Growth and Enterprise for custom integrations and automations.
+
+Q: Can I import from another tool?
+A: Yes — CSV import is available on all plans; assisted migration is available for Enterprise.
+
+Q: Is there a mobile app?
+A: Yes — iOS and Android apps are included on all plans.
+
+4. SUPPORT — COMMON ISSUES & FIXES
+----------------------------------
+LOGIN PROBLEMS
+- Password reset: nexacloud.example/reset. If the reset email doesn't arrive within a few minutes, check spam and confirm you're using the account's registered email.
+- Account locked after failed attempts: locks clear automatically after 30 minutes, or contact support to unlock sooner.
+- SSO login failing (Enterprise): confirm the identity provider metadata is current; expired certificates are the most common cause.
+
+SYNC & DATA
+- Data not updating: sync runs every 5 minutes. Force it under Settings > Sync > Sync Now. Clearing the browser cache resolves most stale-data displays.
+- Changes lost: check you're not viewing an archived or read-only project.
+
+INTEGRATIONS
+- Slack/Google/Teams disconnected: re-authorize under Settings > Integrations. Integration tokens expire every 90 days and must be reconnected.
+- GitHub commits not linking: ensure the repository is connected and commit messages reference the task ID (e.g., NX-123).
+
+PROJECTS & EXPORTS
+- Missing projects after an upgrade: archived projects are hidden by default — enable "Show archived" in the project list.
+- Export failing or timing out: exports over 50,000 rows must be split; apply date filters to reduce the range.
+- Report shows no data: confirm the date range and that the project has activity in that window.
+
+BILLING
+- Invoice or receipt needed: download from Settings > Billing > Invoices.
+- Charged after cancelling: monthly cancellations stop the next cycle; a charge already in progress completes the current period.
+
+Support responds within one business day on Starter/Growth, and within 4 business hours on Enterprise.
+
+5. PARTNERSHIPS & COLLABORATION
+-------------------------------
+We actively consider:
+- Technology integrations (apps that connect to NexaCloud via our API)
+- Reseller and affiliate arrangements
+- Co-marketing (joint webinars, case studies)
+
+We do NOT currently offer:
+- Paid sponsorships
+- Guest posts or backlink exchanges
+- Unpaid "brand ambassador" arrangements
+
+Integration partners receive API access, sandbox credentials, and co-listing in the NexaCloud marketplace. Technical review typically takes about two weeks.
+
+Affiliate program: 20% recurring commission for 12 months on each referred paying customer, tracked via a unique referral link.
+
+To evaluate a partnership, we ask for: a short company overview, your audience or user-base size, and a description of the proposed collaboration. Qualified inquiries are routed to the partnerships team, who will schedule an intro call.
+
+6. SCHEDULING & MEETINGS
+------------------------
+General availability: Monday–Friday, 10:00 AM – 5:00 PM IST.
+Meeting types:
+- Product demo — 30 minutes
+- Technical/integration call — 45 minutes
+- Quick check-in — 15 minutes
+
+To book, either send 2–3 time slots that work for you, or use the self-serve booking link at nexacloud.example/book. We accommodate other time zones with a little advance notice. Please give at least 4 hours' notice for reschedules so the slot can be reopened.
+
+7. TONE & REPLY GUIDANCE
+------------------------
+When replying to inbound email, be warm, concise, and helpful. Confirm the person's need, give the specific relevant facts from above, and offer a clear next step (start a trial, book a demo, reset a password, send partnership details). Never promise features or discounts not listed here; if something isn't covered, say a team member will follow up.
+
