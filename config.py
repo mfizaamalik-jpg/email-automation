@@ -24,7 +24,7 @@ CONFIDENCE_THRESHOLD = 0.6
 PROCESSED_LABEL = "AutoReplied"
 CHROMA_DIR = "./chroma_db"
 COLLECTION_NAME = "knowledge_base"
-MODEL = "gemini-flash-latest"
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 EMBED_MODEL = "gemini-embedding-001"
 REPLY_SIGNOFF = os.getenv("REPLY_SIGNOFF", "The Team")
 
