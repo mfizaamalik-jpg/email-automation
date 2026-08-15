@@ -26,6 +26,7 @@ CHROMA_DIR = "./chroma_db"
 COLLECTION_NAME = "knowledge_base"
 MODEL = "gemini-flash-latest"
 EMBED_MODEL = "gemini-embedding-001"
+REPLY_SIGNOFF = os.getenv("REPLY_SIGNOFF", "The Team")
 
 
 # --- Email niches the classifier can assign ---

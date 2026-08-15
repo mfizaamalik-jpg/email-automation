@@ -255,8 +255,9 @@ def _strip_code_fences(text: str) -> str:
     return text.strip()
 
 
-def _generate_with_retry(prompt: str, attempts: int = 3, backoff: float = 2.0):
-    """Call Gemini, retrying on transient errors (e.g. 503 overload) before giving up."""
+def _generate_with_retry(prompt: str, attempts: int = 4, backoff: float = 2.0):
+    """Call Gemini, retrying with exponential backoff on transient errors
+    (e.g. 503 UNAVAILABLE under free-tier load) before giving up."""
     last_error = None
     for attempt in range(attempts):
         try:
@@ -264,7 +265,9 @@ def _generate_with_retry(prompt: str, attempts: int = 3, backoff: float = 2.0):
         except Exception as e:
             last_error = e
             if attempt < attempts - 1:
-                time.sleep(backoff)
+                wait = backoff * (2 ** attempt)
+                logger.warning(f"Gemini call failed (attempt {attempt + 1}/{attempts}): {e}. Retrying in {wait:.0f}s.")
+                time.sleep(wait)
     raise last_error
 
 
@@ -300,9 +303,29 @@ Respond with ONLY valid JSON (no code fences, no commentary) in this exact shape
         time.sleep(1)  # stay under free-tier rate limits
 
 
+_SENDER_NAME_RE = re.compile(r'^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$')
+
+
+def _sender_greeting_name(sender: str) -> str:
+    """Pull a first name out of a 'Display Name <addr>' header, e.g. 'Fiza' from
+    'Fiza Malik <fizam7519@gmail.com>'. Falls back to 'there' if no display name."""
+    match = _SENDER_NAME_RE.match(sender or "")
+    if match:
+        first = match.group(1).strip().split()[0]
+        if first:
+            return first
+    return "there"
+
+
 def draft_reply(text: str, sender: str, subject: str, niche: str, context: list[str]) -> str:
-    """Draft a reply grounded only in the given context. Never invents facts."""
-    fallback = "Thanks for reaching out — I've received your email and will personally follow up soon."
+    """Draft a reply grounded only in the given context, structured as a real email
+    (greeting, body, sign-off). Never invents facts."""
+    greeting_name = _sender_greeting_name(sender)
+    fallback = (
+        f"Hi {greeting_name},\n\n"
+        "Thanks for reaching out — I've received your email and will personally follow up soon.\n\n"
+        f"Best,\n{config.REPLY_SIGNOFF}"
+    )
     context_block = "\n\n".join(context) if context else ""
 
     prompt = f"""You are drafting a reply to an email on behalf of the recipient.
@@ -318,18 +341,30 @@ Reference context (may be empty or irrelevant):
 \"\"\"{context_block}\"\"\"
 
 Instructions:
-- Write a concise, professional reply grounded ONLY in the reference context above.
+- Write the reply as a real, properly structured email:
+  1. Open with a greeting addressed to "{greeting_name}" on its own line (e.g. "Hi {greeting_name},").
+  2. Write 1-3 short body paragraphs that directly answer the email, grounded ONLY in
+     the reference context above.
+  3. Close with a brief sign-off on its own line, e.g. "Best,\\n{config.REPLY_SIGNOFF}".
 - Do NOT invent facts, prices, dates, or commitments that aren't in the context.
-- If the context is empty or not relevant, write a brief, polite acknowledgment
-  that a human will personally follow up soon — do not make anything up.
-- Output ONLY the reply body text. No subject line, no commentary, no markdown."""
+- If the context is empty or not relevant, keep the body to a brief, polite
+  acknowledgment that a human will personally follow up soon — do not make anything up.
+- Output ONLY the email text (greeting through sign-off). No subject line, no
+  commentary, no markdown."""
 
     try:
         response = _generate_with_retry(prompt)
         draft = (response.text or "").strip()
-        return draft or fallback
+        if not draft:
+            logger.warning(
+                f"draft_reply(): Gemini returned empty text for '{subject}' "
+                f"(niche={niche}); falling back to generic reply. "
+                f"finish_reason(s)={[getattr(c, 'finish_reason', None) for c in (response.candidates or [])]}"
+            )
+            return fallback
+        return draft
     except Exception as e:
-        logger.warning(f"draft_reply() failed: {e}")
+        logger.warning(f"draft_reply() failed for '{subject}' (niche={niche}): {e}")
         return fallback
     finally:
         time.sleep(1)  # stay under free-tier rate limits
